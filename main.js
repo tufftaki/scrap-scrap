@@ -3,9 +3,6 @@ import { ApifyClient } from 'apify-client';
 import ExcelJS from 'exceljs';
 import fs from 'fs';
 
-// ─────────────────────────────────────────────────────────────
-//  CONFIG
-// ─────────────────────────────────────────────────────────────
 const CONFIG = {
     HASHTAGS: [
         'botola', 'wydad', 'rajacasablanca', 'equipedumaroc',
@@ -34,40 +31,31 @@ const CONFIG = {
     ]
 };
 
-// ─────────────────────────────────────────────────────────────
-//  QUALIFICATION LOGIC
-// ─────────────────────────────────────────────────────────────
 function isProfessionalFootballer(profile) {
     const bio = (profile.biography || profile.bio || '').toLowerCase();
-
     for (const keyword of CONFIG.FOOTBALLER_KEYWORDS) {
         if (bio.includes(keyword.toLowerCase())) return true;
     }
-
     if (profile.verified && (profile.postsCount || profile.mediaCount || 0) < 100) {
         return true;
     }
-
     return false;
 }
 
 function isActive(profile) {
     const posts = profile.postsCount || profile.mediaCount || 0;
     if (posts < CONFIG.MIN_POSTS) return false;
-
     if (profile.latestPostDate || profile.lastPostDate) {
         const lastPost = new Date(profile.latestPostDate || profile.lastPostDate);
         const daysSince = (Date.now() - lastPost.getTime()) / (1000 * 60 * 60 * 24);
         if (daysSince > CONFIG.MAX_DAYS_INACTIVE) return false;
     }
-
     return true;
 }
 
 function calculateEngagementRate(profile) {
     const followers = profile.followersCount || profile.followers || 0;
-    if (!followers) return 0;
-
+    if (!followers) return 'N/A';
     if (profile.latestPosts && profile.latestPosts.length > 0) {
         const posts = profile.latestPosts.slice(0, 12);
         const totalEngagement = posts.reduce((sum, post) => {
@@ -76,7 +64,6 @@ function calculateEngagementRate(profile) {
         const avgEngagement = totalEngagement / posts.length;
         return ((avgEngagement / followers) * 100).toFixed(2);
     }
-
     return 'N/A';
 }
 
@@ -89,18 +76,24 @@ function getTier(followers) {
 
 function qualifyProfile(profile) {
     const followers = profile.followersCount || profile.followers || 0;
-
     if (followers < CONFIG.MIN_FOLLOWERS || followers > CONFIG.MAX_FOLLOWERS) return false;
     if (isProfessionalFootballer(profile)) return false;
     if (!isActive(profile)) return false;
     if (profile.isPrivate || profile.private) return false;
-
     return true;
 }
 
-// ─────────────────────────────────────────────────────────────
-//  APIFY ACTOR CALLS
-// ─────────────────────────────────────────────────────────────
+function safeDate(profile) {
+    try {
+        const ts = profile.latestPosts?.[0]?.timestamp;
+        if (!ts) return '';
+        const d = new Date(typeof ts === 'number' ? ts * 1000 : ts);
+        return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+    } catch {
+        return '';
+    }
+}
+
 async function discoverUsernamesFromHashtag(client, hashtag) {
     console.log(`🔍 Discovering profiles from hashtag: #${hashtag}`);
     try {
@@ -109,7 +102,6 @@ async function discoverUsernamesFromHashtag(client, hashtag) {
             resultsLimit: 50,
             proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] }
         });
-
         const { items } = await client.dataset(run.defaultDatasetId).listItems();
         const usernames = [...new Set(
             items
@@ -141,9 +133,6 @@ async function scrapeProfiles(client, usernames) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  EXCEL OUTPUT
-// ─────────────────────────────────────────────────────────────
 async function generateExcel(qualifiedLeads) {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Affiliate Leads');
@@ -167,7 +156,7 @@ async function generateExcel(qualifiedLeads) {
         PRIORITY: { bg: 'FF5c1a1a', fg: 'FFf0a8a8' }
     };
 
-    const columns = [
+    ws.columns = [
         { header: '#',               key: 'num',        width: 5  },
         { header: 'Tier',            key: 'tier',       width: 10 },
         { header: 'Username',        key: 'username',   width: 25 },
@@ -183,12 +172,8 @@ async function generateExcel(qualifiedLeads) {
         { header: 'DM Script',       key: 'dmScript',   width: 80 }
     ];
 
-    ws.columns = columns;
     ws.getRow(1).height = 32;
-
-    ws.getRow(1).eachCell(cell => {
-        Object.assign(cell, headerStyle);
-    });
+    ws.getRow(1).eachCell(cell => { Object.assign(cell, headerStyle); });
 
     qualifiedLeads.forEach((lead, idx) => {
         const tier = getTier(lead.followers);
@@ -232,8 +217,6 @@ async function generateExcel(qualifiedLeads) {
                 wrapText: true
             };
         });
-
-        ws.getRow(idx + 2).height = 100;
     });
 
     const statsWs = wb.addWorksheet('Stats');
@@ -260,9 +243,6 @@ async function generateExcel(qualifiedLeads) {
     return path;
 }
 
-// ─────────────────────────────────────────────────────────────
-//  MAIN
-// ─────────────────────────────────────────────────────────────
 Actor.main(async () => {
     const input = await Actor.getInput();
     const apiToken = input?.apifyApiToken || process.env.APIFY_TOKEN;
@@ -307,7 +287,6 @@ Actor.main(async () => {
         const username = profile.username || profile.userName;
         if (!username || seen.has(username)) continue;
         seen.add(username);
-
         if (!qualifyProfile(profile)) continue;
 
         qualifiedLeads.push({
@@ -317,15 +296,12 @@ Actor.main(async () => {
             posts:      profile.postsCount || profile.mediaCount || 0,
             bio:        profile.biography || profile.bio || '',
             category:   profile.businessCategoryName || profile.category || '',
-            latestPost: profile.latestPosts?.[0]?.timestamp
-                ? new Date(profile.latestPosts[0].timestamp * 1000).toISOString().split('T')[0]
-                : '',
+            latestPost: safeDate(profile),
             rawProfile: profile
         });
     }
 
     qualifiedLeads.sort((a, b) => b.followers - a.followers);
-
     console.log(`\n✅ Qualified leads: ${qualifiedLeads.length}`);
 
     const excelPath = await generateExcel(qualifiedLeads);
@@ -348,5 +324,5 @@ Actor.main(async () => {
         status:         'TO CONTACT'
     })));
 
-    console.log('\n🎉 Done! Download your leads from the Output tab in Apify Console.');
+    console.log('\n🎉 Done! Download your leads from Storage → Key-value store → OUTPUT_EXCEL');
 });
