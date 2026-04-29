@@ -9,7 +9,15 @@ const CONFIG = {
         'footballmaroc', 'wydadcasablanca', 'rcaofficiel',
         'mafootball', 'atlaslions', 'botolama',
         'supportermaroc', 'footballmarocain', 'dima_wydad',
-        'dimaraja', 'maghribkoora'
+        'dimaraja', 'maghribkoora',
+        'wydad37', 'rcamaroc', 'botola2', 'moroccanfootball',
+        'maroc2030', 'cafchampionsleague', 'wydadcup',
+        'lkoora', 'koramaroc', 'wydadfans', 'rajafans',
+        'atlaslionstv', 'morocsport', 'seriesmaroc',
+        'filmmaroc', 'darija', 'marocvines', 'marochumour',
+        'moroccanlifestyle', 'maroctv', 'marocentertainment',
+        'ramadanmaroc', 'darijacomedy', 'marocinfluencer',
+        'contentcreatormaroc', 'moroccancontentcreator'
     ],
     MIN_FOLLOWERS: 8000,
     MAX_FOLLOWERS: 350000,
@@ -99,7 +107,7 @@ async function discoverUsernamesFromHashtag(client, hashtag) {
     try {
         const run = await client.actor('apify/instagram-hashtag-scraper').call({
             hashtags: [hashtag],
-            resultsLimit: 50,
+            resultsLimit: 200,
             proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] }
         });
         const { items } = await client.dataset(run.defaultDatasetId).listItems();
