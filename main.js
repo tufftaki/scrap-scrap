@@ -4,7 +4,6 @@ import ExcelJS from 'exceljs';
 import fs from 'fs';
 
 const CONFIG = {
-    // Pages whose followers are pre-qualified IPTV buyers
     SEED_ACCOUNTS: [
         'bein_sports_ar',
         '2m.officiel',
@@ -23,9 +22,7 @@ const CONFIG = {
         'marocfoot_officiel'
     ],
 
-    // How many followers to scrape per seed account
     FOLLOWERS_PER_ACCOUNT: 500,
-
     MIN_FOLLOWERS: 8000,
     MAX_FOLLOWERS: 500000,
     MIN_POSTS: 30,
@@ -41,7 +38,7 @@ const CONFIG = {
 
     PERSONAL_KEYWORDS: [
         'student', 'étudiant', 'طالب', 'just me', 'personal',
-        'life', 'ma vie', 'حياتي', 'my page', 'صفحتي'
+        'ma vie', 'حياتي', 'my page', 'صفحتي'
     ],
 
     GOOD_SIGNALS: [
@@ -59,9 +56,7 @@ function isProfessionalFootballer(profile) {
     for (const keyword of CONFIG.FOOTBALLER_KEYWORDS) {
         if (bio.includes(keyword.toLowerCase())) return true;
     }
-    if (profile.verified && (profile.postsCount || profile.mediaCount || 0) < 50) {
-        return true;
-    }
+    if (profile.verified && (profile.postsCount || profile.mediaCount || 0) < 50) return true;
     return false;
 }
 
@@ -79,9 +74,7 @@ function hasGoodSignals(profile) {
     for (const signal of CONFIG.GOOD_SIGNALS) {
         if (bio.includes(signal.toLowerCase()) || category.includes(signal.toLowerCase())) return true;
     }
-    // Has a business category = likely a page not personal
     if (profile.businessCategoryName && profile.businessCategoryName !== 'None') return true;
-    // High post count = active content creator
     if ((profile.postsCount || profile.mediaCount || 0) > 100) return true;
     return false;
 }
@@ -143,15 +136,16 @@ function safeDate(profile) {
 async function getFollowersFromAccount(client, username) {
     console.log(`👥 Getting followers from @${username}...`);
     try {
-        const run = await client.actor('apify/instagram-followers-scraper').call({
-            username,
+        const run = await client.actor('apify/instagram-scraper').call({
+            directUrls: [`https://www.instagram.com/${username}/followers/`],
+            resultsType: 'followers',
             resultsLimit: CONFIG.FOLLOWERS_PER_ACCOUNT,
             proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] }
         });
         const { items } = await client.dataset(run.defaultDatasetId).listItems();
         const usernames = [...new Set(
             items
-                .map(item => item.username || item.userName)
+                .map(item => item.username || item.userName || item.ownerUsername)
                 .filter(Boolean)
         )];
         console.log(`  ✅ Found ${usernames.length} followers`);
@@ -275,12 +269,12 @@ async function generateExcel(qualifiedLeads) {
     qualifiedLeads.forEach(l => tierCounts[getTier(l.followers)]++);
 
     [
-        { metric: 'Total Qualified Leads',   value: qualifiedLeads.length },
-        { metric: 'PRACTICE (8K-20K)',        value: tierCounts.PRACTICE },
-        { metric: 'MID (20K-50K)',            value: tierCounts.MID },
-        { metric: 'GOOD (50K-100K)',          value: tierCounts.GOOD },
-        { metric: 'PRIORITY (100K-350K)',     value: tierCounts.PRIORITY },
-        { metric: 'Seed Accounts Scraped',    value: CONFIG.SEED_ACCOUNTS.length },
+        { metric: 'Total Qualified Leads',  value: qualifiedLeads.length },
+        { metric: 'PRACTICE (8K-20K)',       value: tierCounts.PRACTICE },
+        { metric: 'MID (20K-50K)',           value: tierCounts.MID },
+        { metric: 'GOOD (50K-100K)',         value: tierCounts.GOOD },
+        { metric: 'PRIORITY (100K-350K)',    value: tierCounts.PRIORITY },
+        { metric: 'Seed Accounts Scraped',   value: CONFIG.SEED_ACCOUNTS.length },
     ].forEach(s => statsWs.addRow(s));
 
     const path = '/tmp/vizionmaroc_affiliate_leads.xlsx';
