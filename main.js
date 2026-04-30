@@ -4,38 +4,53 @@ import ExcelJS from 'exceljs';
 import fs from 'fs';
 
 const CONFIG = {
-    HASHTAGS: [
-        'botola', 'wydad', 'rajacasablanca', 'equipedumaroc',
-        'footballmaroc', 'wydadcasablanca', 'rcaofficiel',
-        'mafootball', 'atlaslions', 'botolama',
-        'supportermaroc', 'footballmarocain', 'dima_wydad',
-        'dimaraja', 'maghribkoora',
-        'wydad37', 'rcamaroc', 'botola2', 'moroccanfootball',
-        'maroc2030', 'cafchampionsleague', 'wydadcup',
-        'lkoora', 'koramaroc', 'wydadfans', 'rajafans',
-        'atlaslionstv', 'morocsport', 'seriesmaroc',
-        'filmmaroc', 'darija', 'marocvines', 'marochumour',
-        'moroccanlifestyle', 'maroctv', 'marocentertainment',
-        'ramadanmaroc', 'darijacomedy', 'marocinfluencer',
-        'contentcreatormaroc', 'moroccancontentcreator'
+    // Pages whose followers are pre-qualified IPTV buyers
+    SEED_ACCOUNTS: [
+        'bein_sports_ar',
+        '2m.officiel',
+        'medi1tv',
+        'arryadia_tv',
+        'snrt.officiel',
+        'rcaofficiel',
+        'wacofficiel',
+        'equipedumaroc',
+        'fifaworldcup',
+        'championsleague',
+        'premierleague',
+        'laliga',
+        'botola_pro_inwi',
+        'caf_online',
+        'marocfoot_officiel'
     ],
+
+    // How many followers to scrape per seed account
+    FOLLOWERS_PER_ACCOUNT: 500,
+
     MIN_FOLLOWERS: 8000,
-    MAX_FOLLOWERS: 350000,
-    MIN_POSTS: 50,
-    MAX_DAYS_INACTIVE: 45,
+    MAX_FOLLOWERS: 500000,
+    MIN_POSTS: 30,
+    MAX_DAYS_INACTIVE: 60,
+
     FOOTBALLER_KEYWORDS: [
         'professional football player', 'joueur professionnel',
         'footballer', 'football player', 'joueur de football',
         'plays as', 'plays for', 'player at', 'joueur à',
         'joueur du', 'pro player', 'professional player',
-        '@rcaofficiel', '@wacofficiel', '@equipedumaroc'
+        'signed for', 'transfer', 'debut', 'hat trick'
     ],
-    GOOD_PAGE_KEYWORDS: [
+
+    PERSONAL_KEYWORDS: [
+        'student', 'étudiant', 'طالب', 'just me', 'personal',
+        'life', 'ma vie', 'حياتي', 'my page', 'صفحتي'
+    ],
+
+    GOOD_SIGNALS: [
         'page', 'fan', 'news', 'content', 'média', 'media',
-        'créateur', 'creator', 'actualité', 'akbar', 'أخبار',
-        'supporter', 'official', 'officiel', 'academy', 'club',
-        'sport', 'koora', 'كرة', 'collaboration', 'collab',
-        'business', 'partnership', 'dm for', 'contact'
+        'créateur', 'creator', 'actualité', 'أخبار',
+        'supporter', 'official', 'officiel', 'sport',
+        'koora', 'كرة', 'collaboration', 'business',
+        'partnership', 'dm for', 'contact', 'publicité',
+        'promo', 'sponsored', 'partenariat'
     ]
 };
 
@@ -44,9 +59,30 @@ function isProfessionalFootballer(profile) {
     for (const keyword of CONFIG.FOOTBALLER_KEYWORDS) {
         if (bio.includes(keyword.toLowerCase())) return true;
     }
-    if (profile.verified && (profile.postsCount || profile.mediaCount || 0) < 100) {
+    if (profile.verified && (profile.postsCount || profile.mediaCount || 0) < 50) {
         return true;
     }
+    return false;
+}
+
+function isPersonalAccount(profile) {
+    const bio = (profile.biography || profile.bio || '').toLowerCase();
+    for (const keyword of CONFIG.PERSONAL_KEYWORDS) {
+        if (bio.includes(keyword.toLowerCase())) return true;
+    }
+    return false;
+}
+
+function hasGoodSignals(profile) {
+    const bio = (profile.biography || profile.bio || '').toLowerCase();
+    const category = (profile.businessCategoryName || profile.category || '').toLowerCase();
+    for (const signal of CONFIG.GOOD_SIGNALS) {
+        if (bio.includes(signal.toLowerCase()) || category.includes(signal.toLowerCase())) return true;
+    }
+    // Has a business category = likely a page not personal
+    if (profile.businessCategoryName && profile.businessCategoryName !== 'None') return true;
+    // High post count = active content creator
+    if ((profile.postsCount || profile.mediaCount || 0) > 100) return true;
     return false;
 }
 
@@ -86,8 +122,10 @@ function qualifyProfile(profile) {
     const followers = profile.followersCount || profile.followers || 0;
     if (followers < CONFIG.MIN_FOLLOWERS || followers > CONFIG.MAX_FOLLOWERS) return false;
     if (isProfessionalFootballer(profile)) return false;
+    if (isPersonalAccount(profile)) return false;
     if (!isActive(profile)) return false;
     if (profile.isPrivate || profile.private) return false;
+    if (!hasGoodSignals(profile)) return false;
     return true;
 }
 
@@ -102,24 +140,24 @@ function safeDate(profile) {
     }
 }
 
-async function discoverUsernamesFromHashtag(client, hashtag) {
-    console.log(`🔍 Discovering profiles from hashtag: #${hashtag}`);
+async function getFollowersFromAccount(client, username) {
+    console.log(`👥 Getting followers from @${username}...`);
     try {
-        const run = await client.actor('apify/instagram-hashtag-scraper').call({
-            hashtags: [hashtag],
-            resultsLimit: 200,
+        const run = await client.actor('apify/instagram-followers-scraper').call({
+            username,
+            resultsLimit: CONFIG.FOLLOWERS_PER_ACCOUNT,
             proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] }
         });
         const { items } = await client.dataset(run.defaultDatasetId).listItems();
         const usernames = [...new Set(
             items
-                .map(item => item.ownerUsername || item.username || item.owner?.username)
+                .map(item => item.username || item.userName)
                 .filter(Boolean)
         )];
-        console.log(`  ✅ Found ${usernames.length} unique usernames`);
+        console.log(`  ✅ Found ${usernames.length} followers`);
         return usernames;
     } catch (err) {
-        console.log(`  ⚠️ Hashtag ${hashtag} failed: ${err.message}`);
+        console.log(`  ⚠️ Failed for @${username}: ${err.message}`);
         return [];
     }
 }
@@ -237,12 +275,12 @@ async function generateExcel(qualifiedLeads) {
     qualifiedLeads.forEach(l => tierCounts[getTier(l.followers)]++);
 
     [
-        { metric: 'Total Qualified Leads',  value: qualifiedLeads.length },
-        { metric: 'PRACTICE (8K-20K)',       value: tierCounts.PRACTICE },
-        { metric: 'MID (20K-50K)',           value: tierCounts.MID },
-        { metric: 'GOOD (50K-100K)',         value: tierCounts.GOOD },
-        { metric: 'PRIORITY (100K-350K)',    value: tierCounts.PRIORITY },
-        { metric: 'Hashtags Searched',       value: CONFIG.HASHTAGS.length },
+        { metric: 'Total Qualified Leads',   value: qualifiedLeads.length },
+        { metric: 'PRACTICE (8K-20K)',        value: tierCounts.PRACTICE },
+        { metric: 'MID (20K-50K)',            value: tierCounts.MID },
+        { metric: 'GOOD (50K-100K)',          value: tierCounts.GOOD },
+        { metric: 'PRIORITY (100K-350K)',     value: tierCounts.PRIORITY },
+        { metric: 'Seed Accounts Scraped',    value: CONFIG.SEED_ACCOUNTS.length },
     ].forEach(s => statsWs.addRow(s));
 
     const path = '/tmp/vizionmaroc_affiliate_leads.xlsx';
@@ -261,14 +299,14 @@ Actor.main(async () => {
 
     const client = new ApifyClient({ token: apiToken });
 
-    console.log('🚀 VizionMaroc Affiliate Scraper started');
-    console.log(`📋 Searching ${CONFIG.HASHTAGS.length} hashtags`);
+    console.log('🚀 VizionMaroc Affiliate Scraper v2 — Follower-based discovery');
+    console.log(`📋 Scraping followers from ${CONFIG.SEED_ACCOUNTS.length} seed accounts`);
 
     const allUsernames = new Set();
-    for (const hashtag of CONFIG.HASHTAGS) {
-        const usernames = await discoverUsernamesFromHashtag(client, hashtag);
+    for (const account of CONFIG.SEED_ACCOUNTS) {
+        const usernames = await getFollowersFromAccount(client, account);
         usernames.forEach(u => allUsernames.add(u));
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 3000));
     }
 
     console.log(`\n📌 Total unique usernames discovered: ${allUsernames.size}`);
@@ -332,5 +370,5 @@ Actor.main(async () => {
         status:         'TO CONTACT'
     })));
 
-    console.log('\n🎉 Done! Download your leads from Storage → Key-value store → OUTPUT_EXCEL');
+    console.log('\n🎉 Done!');
 });
