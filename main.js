@@ -5,13 +5,79 @@ import fs from 'fs';
 
 const CONFIG = {
     HASHTAGS: [
-        'botola', 'wydad', 'rajacasablanca', 'equipedumaroc',
-        'footballmaroc', 'wydadcasablanca', 'rcaofficiel',
-        'mafootball', 'atlaslions', 'botolama',
-        'supportermaroc', 'footballmarocain', 'dima_wydad',
-        'dimaraja', 'maghribkoora'
+        // Botola specific
+        'botola', 'botolama', 'botola2', 'botola1',
+        'botolapro', 'botolainwi', 'botolamaroc',
+        'botola2425', 'botola2526', 'botola24',
+        'botola25', 'botolaproligue1',
+
+        // Wydad fans
+        'wydad', 'wydad37', 'wydadfans', 'wydadcasablanca',
+        'dima_wydad', 'wydad_stoory', 'wydadnews',
+        'wydadac', 'wydadathletic', 'wydadcup',
+        'wacasablanca', 'wacofficiel', 'wydad_winners',
+        'wydadboy', 'wydadgirl', 'wydadforever',
+        'wydad_ultras', 'ultras_wydad',
+
+        // Raja fans
+        'rajacasablanca', 'dimaraja', 'raja1949',
+        'rajafans', 'rcamaroc', 'rajaofficiel',
+        'raja_ca', 'rajaclub', 'rajacasa',
+        'ultrasraja', 'raja_ultras', 'greenboys',
+        'rajaforever', 'rajanews', 'rajafamily',
+
+        // Other Botola clubs
+        'farcasablanca', 'ircasablanca', 'ittihad_tanger',
+        'hassania_agadir', 'chabab_mohamedia',
+        'kawkab_marrakech', 'mouloudia_oujda',
+        'olympic_safi', 'renaissance_berkane',
+        'rapide_oued_zem', 'difaa_hassani',
+        'maghrib_fes', 'moghreb_athletic',
+        'masts_tanger', 'nahda_berkane',
+        'youssoufia_berrechid',
+
+        // Moroccan national team
+        'equipedumaroc', 'atlaslions', 'atlaslionsfans',
+        'maroc2030', 'coupe_du_monde_maroc',
+        'worldcup2030maroc', 'atlaslionstv',
+        'teammaroc', 'morocconationalteam',
+        'walid_regragui', 'regragui',
+
+        // General Moroccan football
+        'footballmaroc', 'footballmarocain',
+        'mafootball', 'marocfoot', 'koramaroc',
+        'moroccanfootball', 'supportermaroc',
+        'maghribkoora', 'lkoora', 'kora_maroc',
+        'actu_foot_maroc', 'footmaroc',
+        'morocsport', 'sportmaroc',
+        'marocfootball2025', 'marocfootball2026',
+
+        // African football Moroccan angle
+        'cafchampionsleague', 'cafcc', 'cafonline',
+        'africafootball', 'africancup',
+
+        // Moroccan sports general
+        'sportmaroc', 'marocsport', 'sportnewsmaroc',
+        'actu_sport_maroc', 'morocsports',
+
+        // Content creators football niche
+        'footballtiktokmaroc', 'footballreelsmaroc',
+        'footballcontentmaroc', 'footcontentmaroc',
+        'marocfootcontent', 'footballanalysemaroc',
+
+        // Fan culture
+        'ultrasmaroc', 'supportersmaroc',
+        'tribunes_maroc', 'ambiance_stade_maroc',
+        'stademaroc', 'marocstade',
+
+        // Streaming/TV adjacent
+        'beinsportsmaroc', 'arryadia_fans',
+        'snrtmaroc', 'medi1sport',
+        'matchmaroc', 'directsportmaroc',
+        'streamingmaroc', 'matchdirect'
     ],
-    MIN_FOLLOWERS: 8000,
+
+    MIN_FOLLOWERS: 1000,
     MAX_FOLLOWERS: 350000,
     MIN_POSTS: 50,
     MAX_DAYS_INACTIVE: 45,
@@ -68,6 +134,7 @@ function calculateEngagementRate(profile) {
 }
 
 function getTier(followers) {
+    if (followers < 5000) return 'MICRO';
     if (followers < 20000) return 'PRACTICE';
     if (followers < 50000) return 'MID';
     if (followers < 100000) return 'GOOD';
@@ -99,7 +166,7 @@ async function discoverUsernamesFromHashtag(client, hashtag) {
     try {
         const run = await client.actor('apify/instagram-hashtag-scraper').call({
             hashtags: [hashtag],
-            resultsLimit: 200,
+            resultsLimit: 300,
             proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] }
         });
         const { items } = await client.dataset(run.defaultDatasetId).listItems();
@@ -150,6 +217,7 @@ async function generateExcel(qualifiedLeads) {
     };
 
     const tierColors = {
+        MICRO:    { bg: 'FF3d2b6b', fg: 'FFc8a8f0' },
         PRACTICE: { bg: 'FF2d4a6b', fg: 'FFa8c8f0' },
         MID:      { bg: 'FF1a5c38', fg: 'FFa8f0c8' },
         GOOD:     { bg: 'FF5c3d1a', fg: 'FFf0d8a8' },
@@ -180,15 +248,9 @@ async function generateExcel(qualifiedLeads) {
         const colors = tierColors[tier];
         const engRate = calculateEngagementRate(lead.rawProfile);
 
-        const dmScript = `سلام كنتبع صفحة ${lead.fullName || lead.username} من مدة — محتواك زوين بصح والجمهور ديالك متفاعل.
-
-عندي ليك عرض بسيط: خدمة IPTV مغربية سميتها Vizion Maroc — جودة HD، ما كتقطعش، وكدوز كاع ماتشات البطولة والدوريات الكبار على التلفزة أو التيليفون.
-
-الفكرة: تشارك ستوري وحدة أو جوج مع المتابعين ديالك — وكل بيعة جات من طرف صفحتك عندك عليها 30 درهم عمولة.
-
-بلا عقد، بلا التزام.
-
-واش تهمك التفاصيل؟`;
+        const dmScript = lead.followers < 10000
+            ? `سلام خويا 👋 تبارك الله عليك، المحتوى ديالك زوين والجمهور عندك متفاعل بزاف. عندي ليك واحد الاقتراح: تبارطاجي ستوري لخدمة Streaming ديالنا، وكل واحد شرا من عندك كتوصلك 30 درهم فالبلاصة. بلا عقد، بلا التزام، وقتما بغيتي تحبس كتحبس. نصيفط ليك Trial مجاني ديال 24 ساعة تجرّب الخدمة وتشوف الجودة بنفسك؟`
+            : `سلام خويا 👋 تبارك الله عليك، الجمهور اللي عندك عندو قيمة كبيرة وبغينا نتعاونو معاك. حنا براند Vizion Maroc، خدمة Streaming مغربية. الاقتراح هو: كل بيعة من الرابط ديالك كتوصلك فيها 30 درهم فالحين. وإلا كنتي كتفضل Collab مدفوع (ثمن ثابت للستوري)، حنا مستعدين نهضرو فهاد القضية. نصيفط ليك Trial ديال 24 ساعة تشوف الجودة وتعرف علاش كنهضرو؟`;
 
         const row = ws.addRow({
             num:        idx + 1,
@@ -225,12 +287,13 @@ async function generateExcel(qualifiedLeads) {
         { header: 'Value',  key: 'value',  width: 15 }
     ];
 
-    const tierCounts = { PRACTICE: 0, MID: 0, GOOD: 0, PRIORITY: 0 };
+    const tierCounts = { MICRO: 0, PRACTICE: 0, MID: 0, GOOD: 0, PRIORITY: 0 };
     qualifiedLeads.forEach(l => tierCounts[getTier(l.followers)]++);
 
     [
         { metric: 'Total Qualified Leads',  value: qualifiedLeads.length },
-        { metric: 'PRACTICE (8K-20K)',       value: tierCounts.PRACTICE },
+        { metric: 'MICRO (1K-5K)',           value: tierCounts.MICRO },
+        { metric: 'PRACTICE (5K-20K)',       value: tierCounts.PRACTICE },
         { metric: 'MID (20K-50K)',           value: tierCounts.MID },
         { metric: 'GOOD (50K-100K)',         value: tierCounts.GOOD },
         { metric: 'PRIORITY (100K-350K)',    value: tierCounts.PRIORITY },
@@ -253,7 +316,7 @@ Actor.main(async () => {
 
     const client = new ApifyClient({ token: apiToken });
 
-    console.log('🚀 VizionMaroc Affiliate Scraper started');
+    console.log('🚀 VizionMaroc Affiliate Scraper — Botola Edition');
     console.log(`📋 Searching ${CONFIG.HASHTAGS.length} hashtags`);
 
     const allUsernames = new Set();
@@ -324,5 +387,5 @@ Actor.main(async () => {
         status:         'TO CONTACT'
     })));
 
-    console.log('\n🎉 Done! Download your leads from Storage → Key-value store → OUTPUT_EXCEL');
+    console.log('\n🎉 Done! Download from Storage → Key-value store → affiliates');
 });
